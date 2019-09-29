@@ -3,7 +3,7 @@ import torch.utils.data
 import pandas as pd
 import numpy as np
 import scipy.sparse
-#import implicit
+import implicit
 from gensim.models import Word2Vec
 
 
@@ -150,7 +150,6 @@ def calc_mean_ndcg_wrmf(model, data, k):
   res = []
   for user_id, group in grouped:
     ranked = WRMFEmbedded.rank_items(model, user_id, group['movieId'].values)
-    # ranked.sort(key=lambda x: x[0])
     y_pred = np.array([x[1] for x in ranked])
     y_true = group['rating'].values
     ndcg = calc_ndcg(y_true, y_pred, k)
@@ -196,7 +195,7 @@ def get_user_mapping(data):
       mapping[num] = i
     return mapping
 
-def als_gridsearch(csr_train, data_test, k, extra_k=[1], factors_grid = [32, 64, 128], regularization_grid = [0.001, 0.01, 0.1]):
+def als_gridsearch(csr_train, csr_train_t, data_test, k, extra_k=[1], factors_grid = [32, 64, 128], regularization_grid = [0.001, 0.01, 0.1]):
   mean_values = []
   other_values = []
   args = []
@@ -204,13 +203,13 @@ def als_gridsearch(csr_train, data_test, k, extra_k=[1], factors_grid = [32, 64,
     for reg in regularization_grid:
       als = implicit.als.AlternatingLeastSquares(factors=factor, regularization=reg, use_cg=True, calculate_training_loss=True, iterations=30, use_gpu=True)
       als.fit(csr_train, show_progress=True)
-      mean = calc_mean_ndcg(als, csr_train, data_test, k)
+      mean = calc_mean_ndcg_als(als, csr_train_t, data_test, k)
       print("factors: {}, reg: {}, ndcg@{}: {}".format(factor, reg, k, mean))
       mean_values.append(mean)
       args.append((factor, reg))
       vals = []
       for ek in extra_k:
-        val = calc_mean_ndcg(als, csr_train, data_test, ek)
+        val = calc_mean_ndcg_als(als, csr_train_t, data_test, ek)
         print("ndcg@{}: {}".format(ek, val))
         vals.append(val)
       other_values.append(vals)
@@ -220,8 +219,9 @@ def als_gridsearch(csr_train, data_test, k, extra_k=[1], factors_grid = [32, 64,
 
 def get_als_values(all_data, data_train, data_test, use_gridsearch):
     csr_train = dataframe_to_csr(data_train, 'movieId', 'userId', 'rating', (all_data['movieId'].max() + 1, all_data['userId'].max() + 1))
+    csr_train_t = csr_train.transpose().tocsr()
     if use_gridsearch:
-        val, _, vals = als_gridsearch(csr_train, data_test, 10, extra_k=[1])
+        val, _, vals = als_gridsearch(csr_train, csr_train_t, data_test, 10, extra_k=[1])
     else:
-        val, _, vals = als_gridsearch(csr_train, data_test, 10, extra_k=[1], factors_grid=[32], regularization_grid=[0.01])
+        val, _, vals = als_gridsearch(csr_train, csr_train_t, data_test, 10, extra_k=[1], factors_grid=[32], regularization_grid=[0.01])
     return val, vals[0]

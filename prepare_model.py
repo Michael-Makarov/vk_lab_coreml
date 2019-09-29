@@ -14,10 +14,8 @@ if __name__ == "__main__":
     args = parse_args()
     print('Reading data')
     all_data = pd.read_csv(args.data_path)
-    all_data = all_data[:100]
-    print(len(all_data))
+    
     data_train, data_test = split_data(all_data)
-    print(len(data_train), len(data_test))
     if args.calc_als:
         vals = get_als_values(all_data, data_train, data_test, args.use_gridsearch)
         print("ALS metrics")
